@@ -23,7 +23,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
 
   document.tags = [
-    {name: 'users', description: 'Endpoints Related to Users'}
+    { name: 'Users', description: 'Endpoints Related to Users' },
+    { name: 'Products', description: 'Endpoints Related to Products' }
   ];
 
   SwaggerModule.setup('api', app, document) 

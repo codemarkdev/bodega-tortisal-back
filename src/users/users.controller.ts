@@ -6,7 +6,7 @@ import { ApiBody, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { User } from './entities/user.entity';
 import { LoginUserDto } from './dto/login-user.dto';
 
-@Controller('users')
+@Controller('Users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
