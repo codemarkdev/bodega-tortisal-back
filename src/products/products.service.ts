@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
@@ -82,7 +82,7 @@ export class ProductsService {
 
   async searchByName(name: string) {
     return this.productRepository.find({
-      where: { name: `%${name}%` },
+      where: { name: ILike(`%${name}%`)  },
     });
   }
 }
