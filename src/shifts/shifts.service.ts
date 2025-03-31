@@ -138,23 +138,27 @@ export class ShiftsService {
   }
 
 
-  async findAll(date?: string): Promise<Shift[]> {
+  async findAll(date?: string, page: number = 1, limit: number = 10): Promise<{ data: Shift[], total: number }> {
     const whereCondition: any = {};
-    
+  
     if (date) {
       const dateMoment = moment(date, 'DD-MM-YYYY').tz(this.timezone);
       const startOfDay = dateMoment.startOf('day').format(this.dateFormat);
       const endOfDay = dateMoment.endOf('day').format(this.dateFormat);
-      
       whereCondition.check_in_time = Between(startOfDay, endOfDay);
     }
   
-    return await this.shiftRepository.find({ 
-      relations: ['employee'],
+    const [data, total] = await this.shiftRepository.findAndCount({
       where: whereCondition,
-      order: { check_in_time: 'DESC' }
+      relations: ['employee'],
+      order: { check_in_time: 'DESC' },
+      take: limit,
+      skip: (page - 1) * limit,
     });
+  
+    return { data, total };
   }
+  
 
   async getEmployeeShiftsHistory(
     employeeId: number,

@@ -55,16 +55,33 @@ export class ShiftsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Obtener todos los turnos' })
+  @ApiOperation({ summary: 'Obtener todos los turnos con paginación' })
   @ApiQuery({
     name: 'date',
     required: false,
     description: 'Fecha en formato DD-MM-YYYY para filtrar turnos',
     example: '15-05-2023'
   })
-  findAll(@Query('date') date?: string) {
-    return this.shiftsService.findAll(date);
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Número de página (por defecto 1)',
+    example: 1
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Cantidad de registros por página (por defecto 10)',
+    example: 10
+  })
+  findAll(
+    @Query('date') date?: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10
+  ) {
+    return this.shiftsService.findAll(date, page, limit);
   }
+  
 
   @Get('employee/:employeeId/history')
   @ApiOperation({ 

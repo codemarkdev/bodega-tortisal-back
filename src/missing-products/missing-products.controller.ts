@@ -1,3 +1,4 @@
+// missing-products.controller.ts
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { MissingProductsService } from './missing-products.service';
@@ -24,7 +25,7 @@ export class MissingProductsController {
   async findByEmployeeAndDateRange(
     @Param('employeeId') employeeId: number,
     @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string
+    @Query('endDate') endDate: string,
   ): Promise<MissingProduct[]> {
     return await this.missingProductsService.findByEmployeeAndDateRange(employeeId, startDate, endDate);
   }
@@ -68,11 +69,7 @@ export class MissingProductsController {
   @ApiOperation({ summary: 'Productos perdidos por rango de fechas' })
   @ApiQuery({ name: 'startDate', required: true, example: '01-01-2023' })
   @ApiQuery({ name: 'endDate', required: true, example: '31-12-2023' })
-  @ApiResponse({ status: 200, description: 'Productos perdidos en el rango de fechas' })
-  findByDateRange(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string
-  ) {
+  findByDateRange(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
     return this.missingProductsService.findByDateRange(startDate, endDate);
   }
 }
