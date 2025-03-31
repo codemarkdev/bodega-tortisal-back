@@ -2,22 +2,23 @@ import { Controller, Post, Body, Param, Get } from '@nestjs/common';
 import { ToolsIssuedService } from './tools-issued.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ToolsByEmployeeShiftResponseDto } from './dto/tools-by-employee-shift.dto';
+import { CreateToolsIssuedDto } from './dto/issued-tool.dto';
+import { RegisterMultipleToolsReturnDto, ReturnToolDto } from './dto/return-tools.dto';
 
 @ApiTags('Tools Issued')
 @Controller('tools-issued')
 export class ToolsIssuedController {
   constructor(private readonly toolsService: ToolsIssuedService) {}
 
-  @Post('issue')
+  @Post('issue/:shiftId')
   @ApiOperation({ summary: 'Registrar préstamo de herramienta' })
   async issueTool(
-    @Param('shiftId') shiftId: string,
-    @Body() body: { productId: number; quantity: number }
+    @Param('shiftId') shiftId: number,
+    @Body() body: CreateToolsIssuedDto
   ) {
-    return this.toolsService.registerToolsIssue(
-      +shiftId,
-      body.productId,
-      body.quantity
+    return this.toolsService.registerMultipleToolsIssue(
+      shiftId,
+      body.products
     );
   }
 
@@ -47,16 +48,15 @@ export class ToolsIssuedController {
     );
   }
 
-  @Post('return')
-  @ApiOperation({ summary: 'Registrar devolución de herramienta' })
-  async returnTool(
+  @Post('return/:shiftId')
+  @ApiOperation({ summary: 'Registrar devolución de herramientas' })
+  async returnTools(
     @Param('shiftId') shiftId: string,
-    @Body() body: { productId: number; quantity: number }
+    @Body() body: RegisterMultipleToolsReturnDto // Cambiar a un array de objetos
   ) {
-    return this.toolsService.registerToolsReturn(
-      +shiftId,
-      body.productId,
-      body.quantity
+    return this.toolsService.registerMultipleToolsReturn(
+      +shiftId,  // Convertir shiftId a número
+      body.tools      // Pasar el array de productos devueltos
     );
   }
 }

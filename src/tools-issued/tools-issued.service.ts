@@ -5,6 +5,7 @@ import { ToolsIssued } from './entities/tools-issued.entity';
 import { Product } from '../products/entities/product.entity';
 import { Shift } from '../shifts/entities/shift.entity';
 import { ToolsByEmployeeShiftResponseDto } from './dto/tools-by-employee-shift.dto';
+import { MissingProduct } from 'src/missing-products/entities/missing-product.entity';
 
 @Injectable()
 export class ToolsIssuedService {
@@ -15,64 +16,161 @@ export class ToolsIssuedService {
     private productRepository: Repository<Product>,
     @InjectRepository(Shift)
     private shiftRepository: Repository<Shift>,
+    @InjectRepository(MissingProduct)
+    private readonly missingProductRepository: Repository<MissingProduct>
   ) {}
 
-  async registerToolsIssue(shiftId: number, productId: number, quantity: number) {
-    // Validar turno
-    const shift = await this.validateShift(shiftId);
+  async registerMultipleToolsIssue(
+    shiftId: number,
+    products: { productId: number; quantity: number }[]
+  ) {
     
-    // Validar producto
-    const product = await this.validateProduct(productId, quantity);
-
-    // Crear registro
-    const toolIssued = this.toolsIssuedRepository.create({
-      shift: { id: shiftId },
-      product: { id: productId },
-      quantity_issued: quantity
-    });
-
-    // Actualizar stock
-    product.quantity -= quantity;
-    await this.productRepository.save(product);
-
-    return await this.toolsIssuedRepository.save(toolIssued);
-  }
-
-  async registerToolsReturn(shiftId: number, productId: number, quantityReturned: number) {
-    // Obtener el préstamo
-    const toolIssued = await this.toolsIssuedRepository.findOne({
-      where: { 
-        shift: { id: shiftId },
-        product: { id: productId }
-      },
-      relations: ['product', 'shift']
-    });
-
-    if (!toolIssued) {
-      throw new HttpException('No se encontró préstamo para este producto', HttpStatus.NOT_FOUND);
+    // 🔹 Verificar que shiftId es un número válido
+    if (isNaN(shiftId)) {
+      throw new HttpException('ID de turno no válido', HttpStatus.BAD_REQUEST);
     }
+  
+    // 🔹 Buscar el turno
+    const shift = await this.shiftRepository.findOne({ where: { id: shiftId } });
+    if (!shift) {
+      throw new HttpException('Turno no encontrado', HttpStatus.NOT_FOUND);
+    }
+  
+    // 🔹 Verificar si el turno está cerrado
+    if (shift.check_out_time != null) {
+      throw new HttpException('No se pueden prestar herramientas a un turno cerrado', HttpStatus.FORBIDDEN);
+    }
+  
+    const issuedTools: ToolsIssued[] = [];
+  
+    for (const item of products) {
+      const product = await this.validateProduct(item.productId, item.quantity);
+      if (!product) {
+        throw new HttpException(`Producto con ID ${item.productId} no encontrado`, HttpStatus.NOT_FOUND);
+      }
+  
+      if (product.quantity < item.quantity) {
+        throw new HttpException(`Stock insuficiente para el producto con ID ${item.productId}`, HttpStatus.BAD_REQUEST);
+      }
+  
+      // 🔹 Crear registro de préstamo
+      const toolIssued = this.toolsIssuedRepository.create({
+        shift: { id: shiftId },
+        product: { id: item.productId },
+        quantity_issued: item.quantity,
+      });
+  
+      // 🔹 Actualizar stock
+      product.quantity -= item.quantity;
+      await this.productRepository.save(product);
+  
+      // 🔹 Guardar la herramienta prestada en la base de datos
+      const savedToolIssued = await this.toolsIssuedRepository.save(toolIssued);
+      
+      issuedTools.push(savedToolIssued);
+    }
+  
+    return issuedTools;
+  }
+  
+  
+  
 
-    // Validar cantidad
-    if (quantityReturned > toolIssued.quantity_issued) {
+  async registerMultipleToolsReturn(
+    shiftId: number,
+    products: { productId: number; quantityReturned: number }[],
+  ) {
+    if (isNaN(shiftId)) {
+      throw new HttpException('ID de turno no válido', HttpStatus.BAD_REQUEST);
+    }
+  
+    // 🔹 Verificar si el turno está cerrado
+    const shift = await this.shiftRepository.findOne({ where: { id: shiftId } });
+    if (!shift) {
+      throw new HttpException('Turno no encontrado', HttpStatus.NOT_FOUND);
+    }
+    if (shift.check_out_time != null) {
+      throw new HttpException('No se pueden devolver herramientas de un turno cerrado', HttpStatus.FORBIDDEN);
+    }
+  
+    const toolsIssued = await this.toolsIssuedRepository.find({
+      where: {
+        shift: { id: shiftId },
+        product: { id: In(products.map((item) => item.productId)) },
+      },
+      relations: ['product', 'shift', 'missingProducts'],
+    });
+  
+    if (!toolsIssued || toolsIssued.length === 0) {
       throw new HttpException(
-        `Cantidad devuelta excede lo prestado (${toolIssued.quantity_issued})`,
-        HttpStatus.BAD_REQUEST
+        'No se encontraron préstamos para este turno y productos',
+        HttpStatus.NOT_FOUND,
       );
     }
-
-    // Actualizar registro
-    toolIssued.quantity_returned = quantityReturned;
-    await this.toolsIssuedRepository.save(toolIssued);
-
-    // Manejar stock y faltantes
-    if (!toolIssued.product.is_consumable) {
-      toolIssued.product.quantity += quantityReturned;
-      await this.productRepository.save(toolIssued.product);
+  
+    const returnedTools: ToolsIssued[] = [];
+  
+    for (const item of products) {
+      const toolIssued = toolsIssued.find((tool) => tool.product.id === item.productId);
+  
+      if (!toolIssued) {
+        throw new HttpException(
+          `No se encontró préstamo para el producto con ID ${item.productId}`,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+  
+      // Calcular total devuelto incluyendo devoluciones previas
+      const totalReturned = (toolIssued.quantity_returned || 0) + item.quantityReturned;
+  
+      if (totalReturned > toolIssued.quantity_issued) {
+        throw new HttpException(
+          `Cantidad devuelta excede lo prestado para el producto con ID ${item.productId} (${toolIssued.quantity_issued})`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+  
+      // Actualizar cantidad devuelta
+      toolIssued.quantity_returned = totalReturned;
+      await this.toolsIssuedRepository.save(toolIssued);
+  
+      // Actualizar stock si no es consumible
+      if (!toolIssued.product.is_consumable) {
+        toolIssued.product.quantity += item.quantityReturned;
+        await this.productRepository.save(toolIssued.product);
+      }
+  
+      // **Registrar o actualizar pérdida**
+      const missingQuantity = toolIssued.quantity_issued - totalReturned;
+      let existingMissingRecord = toolIssued.missingProducts?.[0];
+  
+      if (missingQuantity > 0) {
+        if (existingMissingRecord) {
+          existingMissingRecord.missing_quantity = missingQuantity;
+          await this.missingProductRepository.save(existingMissingRecord);
+        } else {
+          const newMissingProduct = this.missingProductRepository.create({
+            shift: toolIssued.shift,
+            product: toolIssued.product,
+            toolsIssued: toolIssued,
+            missing_quantity: missingQuantity,
+          });
+          await this.missingProductRepository.save(newMissingProduct);
+        }
+      } else if (existingMissingRecord) {
+        // Si ya no hay pérdidas, eliminamos el registro de missing_products
+        await this.missingProductRepository.remove(existingMissingRecord);
+      }
+  
+      returnedTools.push(toolIssued);
     }
-
-    return toolIssued;
+  
+    return returnedTools;
   }
-
+  
+  
+  
+  
   async getToolsByShift(shiftId: number) {
     const tools = await this.toolsIssuedRepository.find({
       where: { shift: { id: shiftId } },

@@ -1,8 +1,9 @@
 // missing-products.controller.ts
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { MissingProductsService } from './missing-products.service';
 import { MissingProduct } from './entities/missing-product.entity';
+import { ReturnMissingProductDto } from './dto/return-missing-product.dto';
 
 @ApiTags('Missing Products')
 @Controller('missing-products')
@@ -72,4 +73,39 @@ export class MissingProductsController {
   findByDateRange(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
     return this.missingProductsService.findByDateRange(startDate, endDate);
   }
+
+  @Post('return')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Registrar la devolución de un producto faltante' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Devolución registrada exitosamente',
+    schema: {
+      example: {
+        message: 'Se devolvieron 1 unidades del producto Bolsa de Cemento 42.5 Kg',
+        remainingMissing: 1,
+        shift: {
+          id: 12,
+          start: '31-03-2025 11:10:02',
+          end: null,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'No se encontró una pérdida registrada para este producto y empleado',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Datos inválidos o intentó devolver más de lo permitido',
+  })
+  async returnMissingProduct(@Body() returnDto: ReturnMissingProductDto) {
+    return this.missingProductsService.returnMissingProduct(
+      returnDto.employeeId,
+      returnDto.productId,
+      returnDto.quantityReturned,
+    );
+  }
+
 }

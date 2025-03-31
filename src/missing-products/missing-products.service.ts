@@ -1,10 +1,11 @@
 // missing-products.service.ts
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import * as moment from 'moment-timezone';
 import { MissingProduct } from './entities/missing-product.entity';
 import { Shift } from '../shifts/entities/shift.entity';
+import { Product } from 'src/products/entities/product.entity';
 
 @Injectable()
 export class MissingProductsService {
@@ -13,6 +14,8 @@ export class MissingProductsService {
     private readonly missingProductRepository: Repository<MissingProduct>,
     @InjectRepository(Shift)
     private readonly shiftRepository: Repository<Shift>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
 
   async findAll(): Promise<MissingProduct[]> {
@@ -49,6 +52,64 @@ export class MissingProductsService {
         totalMissing: 0,
       };
   }
+
+  async returnMissingProduct(employeeId: number, productId: number, quantityReturned: number) {
+    if (!employeeId || !productId || quantityReturned <= 0) {
+      throw new HttpException('Datos inválidos', HttpStatus.BAD_REQUEST);
+    }
+
+    // Buscar el producto perdido por turno
+    const missingProduct = await this.missingProductRepository.findOne({
+      where: {
+        shift: { employee: { id: employeeId } },
+        product: { id: productId },
+      },
+      relations: ['shift', 'product', 'toolsIssued'],
+    });
+
+    if (!missingProduct) {
+      throw new HttpException('No se encontró una pérdida registrada para este producto y empleado', HttpStatus.NOT_FOUND);
+    }
+
+    if (missingProduct.missing_quantity === 0) {
+      throw new HttpException('No hay productos pendientes de devolución', HttpStatus.BAD_REQUEST);
+    }
+
+    // Validar que no se devuelva más de lo que se perdió
+    if (quantityReturned > missingProduct.missing_quantity) {
+      throw new HttpException(
+        `No puedes devolver más de lo que se reportó como perdido (${missingProduct.missing_quantity})`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Restar cantidad devuelta a la cantidad faltante
+    missingProduct.missing_quantity -= quantityReturned;
+
+    // Si ya no hay productos pendientes, eliminar el registro
+    if (missingProduct.missing_quantity === 0) {
+      await this.missingProductRepository.remove(missingProduct);
+    } else {
+      await this.missingProductRepository.save(missingProduct);
+    }
+
+    // Actualizar stock si el producto no es consumible
+    if (!missingProduct.product.is_consumable) {
+      missingProduct.product.quantity += quantityReturned;
+      await this.productRepository.save(missingProduct.product);
+    }
+
+    return {
+      message: `Se devolvieron ${quantityReturned} unidades del producto ${missingProduct.product.name}`,
+      remainingMissing: missingProduct.missing_quantity,
+      shift: {
+        id: missingProduct.shift.id,
+        start: missingProduct.shift.check_in_time,
+        end: missingProduct.shift.check_out_time,
+      },
+    };
+  }
+  
 
   async getEmployeeWithMostMissingProducts(): Promise<{ employee: any; totalMissing: number }> {
     const result = await this.missingProductRepository

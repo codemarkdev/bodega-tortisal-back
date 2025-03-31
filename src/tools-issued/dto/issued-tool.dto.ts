@@ -7,7 +7,7 @@ class ToolIssuedItemDto {
   @IsInt()
   @IsPositive()
   @IsNotEmpty()
-  id_product: number;
+  productId: number;
 
   @ApiProperty({ description: 'Cantidad prestada', example: 2 })
   @IsInt()
@@ -16,14 +16,8 @@ class ToolIssuedItemDto {
   quantity: number;
 }
 
-export class CreateBulkToolsIssuedDto {
-  @ApiProperty({ description: 'ID del turno', example: 1 })
-  @IsInt()
-  @IsPositive()
-  @IsNotEmpty()
-  id_shift: number;
-
-  @ApiProperty({ type: [ToolIssuedItemDto], description: 'Lista de productos' })
+export class CreateToolsIssuedDto {
+  @ApiProperty({ type: [ToolIssuedItemDto], description: 'Lista de herramientas a prestar' })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ToolIssuedItemDto)
