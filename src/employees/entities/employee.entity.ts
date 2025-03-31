@@ -1,4 +1,5 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Shift } from "src/shifts/entities/shift.entity";
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
 @Entity('employees')
 export class Employee {
@@ -13,4 +14,7 @@ export class Employee {
 
     @Column({ type: 'varchar', length: 256, nullable: true })
     dui: string;
+
+    @OneToMany(() => Shift, (shift) => shift.employee)
+    shifts: Shift[];
 }

@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductsModule } from './products/products.module';
 import { EmployeesModule } from './employees/employees.module';
+import { ShiftsModule } from './shifts/shifts.module';
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { EmployeesModule } from './employees/employees.module';
     }),
     UsersModule,
     ProductsModule,
-    EmployeesModule, 
+    EmployeesModule,
+    ShiftsModule, 
   ],
   controllers: [],
   providers: [],
