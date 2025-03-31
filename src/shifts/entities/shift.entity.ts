@@ -1,5 +1,7 @@
 import { Employee } from "src/employees/entities/employee.entity";
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { MissingProduct } from "src/missing-products/entities/missing-product.entity";
+import { ToolsIssued } from "src/tools-issued/entities/tools-issued.entity";
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
 @Entity('shifts')
 export class Shift {
@@ -16,4 +18,12 @@ export class Shift {
     @ManyToOne(() => Employee, (employee) => employee.shifts, {onDelete: "CASCADE"})
     @JoinColumn({ name: 'id_employee'})
     employee: Employee;
+
+      // Relación con ToolsIssued
+     @OneToMany(() => ToolsIssued, (toolsIssued) => toolsIssued.shift)
+    toolsIssued: ToolsIssued[];
+
+    // Relación directa con MissingProduct (según diagrama)
+    @OneToMany(() => MissingProduct, (missingProduct) => missingProduct.shift)
+    missingProducts: MissingProduct[];
 }

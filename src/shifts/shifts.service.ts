@@ -5,10 +5,13 @@ import * as moment from 'moment-timezone';
 import { Shift } from './entities/shift.entity';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { UpdateShiftDto } from './dto/update-shift.dto';
-import { Employee } from 'src/employees/entities/employee.entity';
+import { Employee } from '../employees/entities/employee.entity';
 
 @Injectable()
 export class ShiftsService {
+  private readonly timezone = 'America/El_Salvador';
+  private readonly dateFormat = 'DD-MM-YYYY HH:mm:ss';
+
   constructor(
     @InjectRepository(Shift)
     private readonly shiftRepository: Repository<Shift>,
@@ -16,9 +19,7 @@ export class ShiftsService {
     private readonly employeeRepository: Repository<Employee>,
   ) {}
 
-  async create(createShiftDto: CreateShiftDto) {
-    const checkInTime = moment().tz('America/El_Salvador').format('DD-MM-YYYY HH:mm:ss'); // Convertir a UTC antes de guardar
-  
+  async create(createShiftDto: CreateShiftDto): Promise<Shift> {
     const employee = await this.employeeRepository.findOne({
       where: { id: createShiftDto.id_employee }
     });
@@ -26,52 +27,191 @@ export class ShiftsService {
     if (!employee) {
       throw new NotFoundException(`Empleado con ID ${createShiftDto.id_employee} no encontrado`);
     }
-  
+
+    // Verificar que no tenga turnos hoy (abiertos o cerrados)
+    const today = moment().tz(this.timezone).format('DD-MM-YYYY');
+    const hasShiftToday = await this.hasShiftOnDate(employee.id, today);
+
+    if (hasShiftToday) {
+      throw new HttpException(
+        'El empleado ya tiene un turno registrado hoy',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    // Crear nuevo turno
     const shift = this.shiftRepository.create({
       employee,
-      check_in_time: checkInTime, // Fecha en UTC
+      check_in_time: moment().tz(this.timezone).format(this.dateFormat),
     });
   
     return await this.shiftRepository.save(shift);
   }
-  
 
-  async findAll() {
-    return await this.shiftRepository.find({ relations: ['employee'] });
+  private async hasShiftOnDate(employeeId: number, dateString: string): Promise<boolean> {
+    const date = moment(dateString, 'DD-MM-YYYY').tz(this.timezone);
+    const startOfDay = date.startOf('day').format(this.dateFormat);
+    const endOfDay = date.endOf('day').format(this.dateFormat);
+
+    const count = await this.shiftRepository.count({
+      where: {
+        employee: { id: employeeId },
+        check_in_time: Between(startOfDay, endOfDay)
+      }
+    });
+
+    return count > 0;
   }
 
-  async findOne(id: number) {
+  async getTodayShift(employeeId: number): Promise<Shift | null> {
+    const today = moment().tz(this.timezone).format('DD-MM-YYYY');
+    const startOfDay = moment(today, 'DD-MM-YYYY').startOf('day').format(this.dateFormat);
+    const endOfDay = moment(today, 'DD-MM-YYYY').endOf('day').format(this.dateFormat);
+
+    return await this.shiftRepository.findOne({
+      where: {
+        employee: { id: employeeId },
+        check_in_time: Between(startOfDay, endOfDay)
+      },
+      relations: ['employee'],
+      order: { check_in_time: 'DESC' }
+    });
+  }
+
+  async closeShift(employeeId: number): Promise<Shift> {
+    const shift = await this.getTodayShift(employeeId);
+    
+    if (!shift) {
+      throw new HttpException(
+        'No se encontró un turno para este empleado hoy',
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    if (shift.check_out_time) {
+      throw new HttpException(
+        'El turno ya está cerrado',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    shift.check_out_time = moment()
+      .tz(this.timezone)
+      .format(this.dateFormat);
+  
+    return await this.shiftRepository.save(shift);
+  }
+
+  private async getActiveShift(employeeId: number): Promise<Shift> {
+    const todayShifts = await this.getShiftsForEmployee(employeeId);
+    const activeShift = todayShifts.find(shift => !shift.check_out_time);
+
+    if (!activeShift) {
+      throw new HttpException(
+        'No se encontró un turno activo para este empleado hoy',
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    return activeShift;
+  }
+
+  async getShiftsForEmployee(
+    employeeId: number, 
+    date?: string
+  ): Promise<Shift[]> {
+    const targetDate = date 
+      ? moment(date, this.dateFormat).tz(this.timezone)
+      : moment().tz(this.timezone);
+  
+    const startOfDay = targetDate.startOf('day').format(this.dateFormat);
+    const endOfDay = targetDate.endOf('day').format(this.dateFormat);
+  
+    return this.shiftRepository.find({
+      where: {
+        employee: { id: employeeId },
+        check_in_time: Between(startOfDay, endOfDay),
+      },
+      relations: ['employee'],
+      order: { check_in_time: 'DESC' }
+    });
+  }
+
+
+  async findAll(date?: string): Promise<Shift[]> {
+    const whereCondition: any = {};
+    
+    if (date) {
+      const dateMoment = moment(date, 'DD-MM-YYYY').tz(this.timezone);
+      const startOfDay = dateMoment.startOf('day').format(this.dateFormat);
+      const endOfDay = dateMoment.endOf('day').format(this.dateFormat);
+      
+      whereCondition.check_in_time = Between(startOfDay, endOfDay);
+    }
+  
+    return await this.shiftRepository.find({ 
+      relations: ['employee'],
+      where: whereCondition,
+      order: { check_in_time: 'DESC' }
+    });
+  }
+
+  async getEmployeeShiftsHistory(
+    employeeId: number,
+    startDate?: string,
+    endDate?: string
+  ): Promise<Shift[]> {
+    // Validar que el empleado exista
+    const employee = await this.employeeRepository.findOne({ 
+      where: { id: employeeId } 
+    });
+    
+    if (!employee) {
+      throw new NotFoundException(`Empleado con ID ${employeeId} no encontrado`);
+    }
+  
+    const whereCondition: any = {
+      employee: { id: employeeId }
+    };
+  
+    // Si se proporcionan fechas, filtrar por rango
+    if (startDate || endDate) {
+      const start = startDate 
+        ? moment(startDate, 'DD-MM-YYYY').tz(this.timezone).startOf('day').format(this.dateFormat)
+        : moment().tz(this.timezone).startOf('day').subtract(1, 'month').format(this.dateFormat);
+      
+      const end = endDate
+        ? moment(endDate, 'DD-MM-YYYY').tz(this.timezone).endOf('day').format(this.dateFormat)
+        : moment().tz(this.timezone).endOf('day').format(this.dateFormat);
+  
+      whereCondition.check_in_time = Between(start, end);
+    }
+  
+    return await this.shiftRepository.find({
+      where: whereCondition,
+      relations: ['employee'],
+      order: { check_in_time: 'DESC' }
+    });
+  }
+
+  async findOne(id: number): Promise<Shift> {
     const shift = await this.shiftRepository.findOne({
       where: { id },
       relations: ['employee'],
     });
 
-    if (!shift) throw new NotFoundException(`El turno con ID ${id} no existe`);
+    if (!shift) {
+      throw new NotFoundException(`El turno con ID ${id} no existe`);
+    }
 
     return shift;
   }
 
-  async updateShiftByEmployee(updateShiftDto: UpdateShiftDto) {
-    // 1. Obtener fecha actual en El Salvador (inicio y fin del día)
-    const todayStart = moment().tz('America/El_Salvador').startOf('day').format('YYYY-MM-DD HH:mm:ss');
-    const todayEnd = moment().tz('America/El_Salvador').endOf('day').format('YYYY-MM-DD HH:mm:ss');
-  
-    // 2. Buscar turno activo (sin hora de salida y del día actual)
-    const activeShift = await this.shiftRepository.findOne(
-      {where: {
-      employee: {id: updateShiftDto.employeeId},
-    },
-    relations: ['employee']
-  });
-  
-    if (!activeShift) {
-      throw new HttpException(
-        'No se encontró un turno activo para este empleado hoy',
-        HttpStatus.NOT_FOUND,
-      );
-    }
-  
-    // 3. Registrar hora de salida (formato DD-MM-YYYY HH:mm:ss)
+  async updateShiftByEmployee(updateShiftDto: UpdateShiftDto): Promise<Shift> {
+    // 1. Obtener el turno activo más reciente del empleado
+    const activeShift = await this.getCurrentShift(updateShiftDto.employeeId);
+
+    // 2. Registrar hora de salida
     activeShift.check_out_time = moment()
       .tz('America/El_Salvador')
       .format('DD-MM-YYYY HH:mm:ss');
@@ -79,28 +219,31 @@ export class ShiftsService {
     return await this.shiftRepository.save(activeShift);
   }
 
-  async remove(id: number) {
+  async remove(id: number): Promise<Shift> {
     const shift = await this.findOne(id);
     return await this.shiftRepository.remove(shift);
   }
 
-  async getShiftsForEmployee(employeeId: number, date?: string): Promise<Shift[]> {
-    // 1. Obtener la fecha objetivo en formato local (El Salvador)
-    const targetDate = date 
-      ? moment(date, 'DD-MM-YYYY HH:mm:ss').tz('America/El_Salvador') 
-      : moment().tz('America/El_Salvador');
-  
-    // 2. Definir rangos del día en formato string (DD-MM-YYYY HH:mm:ss)
-    const startOfDay = targetDate.startOf('day').format('DD-MM-YYYY HH:mm:ss');
-    const endOfDay = targetDate.endOf('day').format('DD-MM-YYYY HH:mm:ss');
-  
-    // 3. Buscar turnos donde check_in_time esté entre las fechas locales
-    return this.shiftRepository.find({
-      where: {
-        employee: { id: employeeId },
-        check_in_time: Between(startOfDay, endOfDay), // Comparación como strings
-      },
-      relations: ['employee'],
-    });
+  private async getCurrentShift(employeeId: number): Promise<Shift> {
+    // Obtener el turno más reciente sin cerrar
+    const todayShifts = await this.getShiftsForEmployee(employeeId);
+    const activeShift = todayShifts.find(shift => !shift.check_out_time);
+
+    if (!activeShift) {
+      throw new HttpException(
+        'No se encontró un turno activo para este empleado hoy',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return activeShift;
+  }
+
+  async getEmployeeActiveShift(employeeId: number): Promise<Shift | null> {
+    try {
+      return await this.getCurrentShift(employeeId);
+    } catch (error) {
+      return null;
+    }
   }
 }

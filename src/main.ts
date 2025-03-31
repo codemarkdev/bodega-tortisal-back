@@ -26,7 +26,8 @@ async function bootstrap() {
     { name: 'Users', description: 'Endpoints Related to Users' },
     { name: 'Employees', description: 'Endpoints Related to Employees' },
     { name: 'Products', description: 'Endpoints Related to Products' },
-    { name: 'Shifts', description: 'Endpoints Related to Shifts' }
+    { name: 'Shifts', description: 'Endpoints Related to Shifts' },
+    { name: 'Tools Issued', description: 'Endpoints Related to Tools Issued'}
   ];
 
   SwaggerModule.setup('api', app, document) 

@@ -5,6 +5,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductsModule } from './products/products.module';
 import { EmployeesModule } from './employees/employees.module';
 import { ShiftsModule } from './shifts/shifts.module';
+import { ToolsIssuedModule } from './tools-issued/tools-issued.module';
+import { MissingProductsModule } from './missing-products/missing-products.module';
 
 @Module({
   imports: [
@@ -27,7 +29,9 @@ import { ShiftsModule } from './shifts/shifts.module';
     UsersModule,
     ProductsModule,
     EmployeesModule,
-    ShiftsModule, 
+    ShiftsModule,
+    ToolsIssuedModule,
+    MissingProductsModule, 
   ],
   controllers: [],
   providers: [],

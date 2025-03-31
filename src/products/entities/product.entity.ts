@@ -1,4 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { MissingProduct } from "src/missing-products/entities/missing-product.entity";
+import { ToolsIssued } from "src/tools-issued/entities/tools-issued.entity";
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
 @Entity('products')
 export class Product {
@@ -19,4 +21,12 @@ export class Product {
 
     @Column({ type: 'boolean', nullable: false })
     is_consumable: boolean;
+
+      // Relación con ToolsIssued
+    @OneToMany(() => ToolsIssued, (toolsIssued) => toolsIssued.product)
+    toolsIssued: ToolsIssued[];
+
+  // Relación con MissingProduct
+    @OneToMany(() => MissingProduct, (missingProduct) => missingProduct.product)
+    missingProducts: MissingProduct[];
 }
