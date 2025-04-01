@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, Raw, Repository } from 'typeorm';
 import * as moment from 'moment-timezone';
 import { Shift } from './entities/shift.entity';
 import { CreateShiftDto } from './dto/create-shift.dto';
@@ -159,7 +159,6 @@ export class ShiftsService {
     return { data, total };
   }
   
-
   async getEmployeeShiftsHistory(
     employeeId: number,
     startDate?: string,
@@ -180,15 +179,24 @@ export class ShiftsService {
   
     // Si se proporcionan fechas, filtrar por rango
     if (startDate || endDate) {
+      // Formateamos las fechas en el mismo formato DD-MM-YYYY HH:mm:ss
       const start = startDate 
-        ? moment(startDate, 'DD-MM-YYYY').tz(this.timezone).startOf('day').format(this.dateFormat)
-        : moment().tz(this.timezone).startOf('day').subtract(1, 'month').format(this.dateFormat);
+        ? moment(startDate, 'DD-MM-YYYY').tz(this.timezone).startOf('day').format('DD-MM-YYYY HH:mm:ss')
+        : moment().tz(this.timezone).startOf('day').subtract(1, 'month').format('DD-MM-YYYY HH:mm:ss');
       
       const end = endDate
-        ? moment(endDate, 'DD-MM-YYYY').tz(this.timezone).endOf('day').format(this.dateFormat)
-        : moment().tz(this.timezone).endOf('day').format(this.dateFormat);
+        ? moment(endDate, 'DD-MM-YYYY').tz(this.timezone).endOf('day').format('DD-MM-YYYY HH:mm:ss')
+        : moment().tz(this.timezone).endOf('day').format('DD-MM-YYYY HH:mm:ss');
   
-      whereCondition.check_in_time = Between(start, end);
+      /* 
+        Se utiliza STR_TO_DATE para convertir:
+        - El valor de la columna (check_in_time) 
+        - Los valores start y end
+        al tipo DATE dentro de SQL, con el formato '%d-%m-%Y %H:%i:%s'
+      */
+      whereCondition.check_in_time = Raw(alias => 
+        `STR_TO_DATE(${alias}, '%d-%m-%Y %H:%i:%s') BETWEEN STR_TO_DATE('${start}', '%d-%m-%Y %H:%i:%s') AND STR_TO_DATE('${end}', '%d-%m-%Y %H:%i:%s')`
+      );
     }
   
     return await this.shiftRepository.find({
@@ -197,6 +205,8 @@ export class ShiftsService {
       order: { check_in_time: 'DESC' }
     });
   }
+  
+  
 
   async findOne(id: number): Promise<Shift> {
     const shift = await this.shiftRepository.findOne({
