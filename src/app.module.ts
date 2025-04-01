@@ -7,6 +7,8 @@ import { EmployeesModule } from './employees/employees.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { ToolsIssuedModule } from './tools-issued/tools-issued.module';
 import { MissingProductsModule } from './missing-products/missing-products.module';
+import { BackupService } from './backup/backup.service';
+import { BackupModule } from './backup/backup.module';
 
 @Module({
   imports: [
@@ -32,8 +34,9 @@ import { MissingProductsModule } from './missing-products/missing-products.modul
     ShiftsModule,
     ToolsIssuedModule,
     MissingProductsModule, 
+    BackupModule
   ],
   controllers: [],
-  providers: [],
+  providers: [BackupService],
 })
 export class AppModule {}
