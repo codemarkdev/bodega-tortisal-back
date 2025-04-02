@@ -83,7 +83,7 @@ export class ProductsService {
   async searchByName(name: string) {
     return this.productRepository.find({
       where: { name: ILike(`%${name}%`)  },
-      select: ['name', 'quantity']
+      select: ['id', 'name', 'quantity']
     });
   }
 }
