@@ -18,6 +18,13 @@ export class EmployeesController {
     return this.employeesService.create(createEmployeeDto);
   }
 
+  @Get('findAll/')
+  @ApiOperation({ summary: 'Obtener la lista de empleados sin paginacion' })
+  @ApiResponse({ status: 200, description: 'Lista de empleados obtenida correctamente' })
+  findAllWithouthPagination() {
+    return this.employeesService.findWithouthPagination();
+  }
+
   @Get()
   @ApiOperation({ summary: 'Obtener una lista de empleados con paginación' })
   @ApiQuery({ name: 'page', required: false, example: 1, description: 'Número de página' })

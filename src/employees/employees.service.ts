@@ -21,6 +21,10 @@ export class EmployeesService {
     return this.employeeRepository.save(employee);
   }
 
+  async findWithouthPagination() {
+    return await this.employeeRepository.find();
+  }
+
   async findAll(paginationDto: PaginationDto) {
     const { page = 1, limit = 10 } = paginationDto;
     const [ data, total ] = await this.employeeRepository.findAndCount({
