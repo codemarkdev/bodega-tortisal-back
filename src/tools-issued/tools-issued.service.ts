@@ -52,22 +52,41 @@ export class ToolsIssuedService {
       if (product.quantity < item.quantity) {
         throw new HttpException(`Stock insuficiente para el producto con ID ${item.productId}`, HttpStatus.BAD_REQUEST);
       }
-  
-      // 🔹 Crear registro de préstamo
+
+      let existingTool = await this.toolsIssuedRepository.findOne({
+        where: {
+          shift: { id: shiftId },
+          product: { id: item.productId }
+        }
+      })
+
+      // Acumular cantidad si ya se presto la herramienta
+
+      if (existingTool) {
+        existingTool.quantity_issued += item.quantity;
+        await this.toolsIssuedRepository.save(existingTool);
+        issuedTools.push(existingTool);
+      } else { 
+
+        // Crear nuevo registro si no se ha prestado
+
       const toolIssued = this.toolsIssuedRepository.create({
         shift: { id: shiftId },
         product: { id: item.productId },
         quantity_issued: item.quantity,
       });
+
+      // 🔹 Guardar la herramienta prestada en la base de datos
+      const savedToolIssued = await this.toolsIssuedRepository.save(toolIssued);
+      
+      issuedTools.push(savedToolIssued);
+      
+      }
   
       // 🔹 Actualizar stock
       product.quantity -= item.quantity;
       await this.productRepository.save(product);
   
-      // 🔹 Guardar la herramienta prestada en la base de datos
-      const savedToolIssued = await this.toolsIssuedRepository.save(toolIssued);
-      
-      issuedTools.push(savedToolIssued);
     }
   
     return issuedTools;
@@ -136,8 +155,10 @@ export class ToolsIssuedService {
   
       // Actualizar stock si no es consumible
       if (!toolIssued.product.is_consumable) {
-        toolIssued.product.quantity += item.quantityReturned;
-        await this.productRepository.save(toolIssued.product);
+        throw new HttpException(
+          `Los productos consumibles (${toolIssued.product.name}) no pueden ser devueltos!`,
+          HttpStatus.BAD_REQUEST
+        )
       }
   
       // **Registrar o actualizar pérdida**
@@ -288,6 +309,7 @@ export class ToolsIssuedService {
   }
 
   private getToolStatus(tool: ToolsIssued): string {
+    if (tool.product.is_consumable) return 'CONSUMIBLE'
     if (tool.quantity_returned === null) return 'PENDIENTE';
     if (tool.quantity_returned === tool.quantity_issued) return 'COMPLETO';
     if ((tool.quantity_returned + (tool.missingProducts?.reduce((sum, mp) => sum + mp.missing_quantity, 0) || 0)) 
