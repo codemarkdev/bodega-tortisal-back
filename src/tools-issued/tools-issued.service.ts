@@ -153,13 +153,19 @@ export class ToolsIssuedService {
       toolIssued.quantity_returned = totalReturned;
       await this.toolsIssuedRepository.save(toolIssued);
   
-      // Actualizar stock si no es consumible
-      if (!toolIssued.product.is_consumable) {
+      // Si son consumibles no se permite retornar
+      if (toolIssued.product.is_consumable) {
         throw new HttpException(
           `Los productos consumibles (${toolIssued.product.name}) no pueden ser devueltos!`,
           HttpStatus.BAD_REQUEST
         )
       }
+      
+          // Manejar stock y faltantes
+    if (!toolIssued.product.is_consumable) {
+      toolIssued.product.quantity += toolIssued.quantity_returned;
+      await this.productRepository.save(toolIssued.product);
+    }
   
       // **Registrar o actualizar pérdida**
       const missingQuantity = toolIssued.quantity_issued - totalReturned;
