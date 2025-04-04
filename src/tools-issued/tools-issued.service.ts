@@ -163,7 +163,7 @@ export class ToolsIssuedService {
       
           // Manejar stock y faltantes
     if (!toolIssued.product.is_consumable) {
-      toolIssued.product.quantity += toolIssued.quantity_returned;
+      toolIssued.product.quantity += item.quantityReturned;
       await this.productRepository.save(toolIssued.product);
     }
   
