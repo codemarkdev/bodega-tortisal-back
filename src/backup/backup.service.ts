@@ -24,7 +24,7 @@ export class BackupService {
 
   async createBackup(): Promise<void> {
     const dbHost = this.configService.get<string>('DATABASE_HOST');
-    const dbUser = this.configService.get<string>('DATABASE_USERNAME');
+    const dbUser = this.configService.get<string>('DATABASE_USER');
     const dbPassword = this.configService.get<string>('DATABASE_PASSWORD');
     const dbName = this.configService.get<string>('DATABASE_NAME');
 
@@ -33,7 +33,7 @@ export class BackupService {
 
 
     // Validacion de que las variables se pasen correctamente
-    
+
     if (!dbHost || !dbUser || !dbPassword || !dbName) {
       throw new Error('Missing required database configuration in environment variables');
     }
