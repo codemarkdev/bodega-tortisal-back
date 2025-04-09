@@ -8,9 +8,25 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   app.enableCors({
-    origin: configService.get<string>('FRONTEND_URL', 'localhost:4000'),
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        configService.get<string>('FRONTEND_URL'),
+        configService.get<string>('FRONTEND_URL_PROD'),
+        configService.get<string>('BACKEND_URL'),
+        configService.get<string>('BACKEND_URL_PROD'),
+        configService.get<string>('BACKEND_URL_LOCAL'),
+        configService.get<string>('FRONTEND_URL_LOCAL'),
+      ].filter(Boolean);
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Origen no permitido por CORS'))
+      }
+    },
+
     methods: 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
-    allowHeaders: 'Content-Type, Authorization',
+    allowedHeaders: 'Content-Type, Authorization',
     credentials: true
   });
 
